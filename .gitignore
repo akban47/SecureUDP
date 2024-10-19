@@ -1,7 +1,0 @@
-project/server
-project/client
-project/*.out
-*.zip
-project/project
-results
-.vscode
