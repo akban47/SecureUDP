@@ -1,76 +1,51 @@
-#include <sys/socket.h>
+#include "consts.h"
+#include "sec.h"
+#include "transport.h"
 #include <arpa/inet.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <stdlib.h>
-#include <fcntl.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
-int main(int argc, char *argv[])
-{
-    int PORT = atoi(argv[1]);
-    if (PORT <= 0 || PORT > 65535)
-        return 1;
-    int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-
-    struct sockaddr_in servaddr;
-    servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = INADDR_ANY;
-    servaddr.sin_port = htons(PORT);
-
-    int did_bind = bind(sockfd, (struct sockaddr *)&servaddr,
-                        sizeof(servaddr));
-
-    if (did_bind < 0)
-        return errno;
-
-    int BUF_SIZE = 1024;
-    char client_buf[BUF_SIZE];
-    struct sockaddr_in clientaddr;
-    socklen_t clientsize = sizeof(clientaddr);
-    int client_connect = 0;
-
-    int flags = fcntl(sockfd, F_GETFL);
-    flags |= O_NONBLOCK;
-    fcntl(sockfd, F_SETFL, flags);
-
-    flags = fcntl(STDIN_FILENO, F_GETFL);
-    flags |= O_NONBLOCK;
-    fcntl(STDIN_FILENO, F_SETFL, flags);
-
-    char stdin_buf[BUF_SIZE];
-
-    while (1)
-    {
-
-        int bytes_rec = recvfrom(sockfd, client_buf, BUF_SIZE, 0, (struct sockaddr *)&clientaddr, &clientsize);
-
-        if (bytes_rec > 0)
-        {
-            int bytes_written = write(STDOUT_FILENO, client_buf, bytes_rec);
-            if (bytes_written != bytes_rec)
-            {
-                perror("write");
-                break;
-            }
-            client_connect = 1;
-        }
-        if (client_connect)
-        {
-            int bytes_read = read(STDIN_FILENO, stdin_buf, BUF_SIZE);
-            if (bytes_read > 0)
-            {
-                int bytes_sent = sendto(sockfd, stdin_buf, bytes_read, 0, (struct sockaddr *)&clientaddr, clientsize);
-                if (bytes_sent != bytes_read)
-                {
-                    perror("sendto");
-                    break;
-                }
-            }
-        }
+int main(int argc, char** argv) {
+    if (argc < 2) {
+        fprintf(stderr, "Usage: server <port>\n");
+        exit(1);
     }
 
-    close(sockfd);
+    /* Create sockets */
+    int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+    // use IPv4  use UDP
+
+    /* Construct our address */
+    struct sockaddr_in server_addr;
+    server_addr.sin_family = AF_INET; // use IPv4
+    server_addr.sin_addr.s_addr =
+        INADDR_ANY; // accept all connections
+                    // same as inet_addr("0.0.0.0")
+                    // "Address string to network bytes"
+    // Set receiving port
+    int PORT = atoi(argv[1]);
+    server_addr.sin_port = htons(PORT); // Big endian
+
+    /* Let operating system know about our config */
+    int did_bind =
+        bind(sockfd, (struct sockaddr*) &server_addr, sizeof(server_addr));
+
+    struct sockaddr_in client_addr; // Same information, but about client
+    socklen_t s = sizeof(struct sockaddr_in);
+    char buffer;
+
+    // Wait for client connection
+    while (1) {
+        int bytes_recvd = recvfrom(sockfd, &buffer, sizeof(buffer), MSG_PEEK,
+                                   (struct sockaddr*) &client_addr, &s);
+        if (bytes_recvd > 0)
+            break;
+    }
+
+    init_sec(SERVER_CLIENT_HELLO_AWAIT);
+    listen_loop(sockfd, &client_addr, SERVER_AWAIT, input_sec, output_sec);
+
     return 0;
 }
