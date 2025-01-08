@@ -21,7 +21,6 @@ int main(int argc, char** argv) {
     /* Construct server address */
     struct sockaddr_in server_addr;
     server_addr.sin_family = AF_INET; // use IPv4
-    // Only supports localhost as a hostname, but that's all we'll test on
     char* addr = strcmp(argv[1], "localhost") == 0 ? "127.0.0.1" : argv[1];
     server_addr.sin_addr.s_addr = inet_addr(addr);
     // Set sending port
